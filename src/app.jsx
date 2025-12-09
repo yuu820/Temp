@@ -34,9 +34,10 @@ const countWords = (text = '') => {
 };
 
 const fetchJson = async (url, options = {}) => {
+  const { headers, ...restOptions } = options;
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options,
+    ...restOptions,
+    headers: { 'Content-Type': 'application/json', ...(headers || {}) },
   });
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
