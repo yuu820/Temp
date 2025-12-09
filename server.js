@@ -137,12 +137,15 @@ db.serialize(() => {
   });
 
   db.get('SELECT id FROM users WHERE username = ?', ['yuu820'], (err, row) => {
-    if (err) return;
+    if (err) {
+      console.error('Error checking for yuu820 user:', err);
+      return;
+    }
     const today = currentJstDate();
     if (!row) {
       try {
         const userId = randomUUID();
-        const userPassword = 'yu200820';
+        const userPassword = process.env.YUU820_PASSWORD || 'yu200820';
         const userHash = bcrypt.hashSync(userPassword, 10);
         db.run(
           `INSERT INTO users(id, username, password, displayName, accessRole, dailyLimit, priority, userType, proAccess, dailyUsed, lastReset)
