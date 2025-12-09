@@ -21518,8 +21518,8 @@ var require_app = __commonJS({
     };
     var fetchJson = async (url, options = {}) => {
       const res = await fetch(url, {
-        headers: { "Content-Type": "application/json", ...options.headers || {} },
-        ...options
+        ...options,
+        headers: { "Content-Type": "application/json", ...options.headers || {} }
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
