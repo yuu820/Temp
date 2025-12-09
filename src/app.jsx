@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import wordCount from 'word-count';
+import constants from '../shared/constants.json';
 
 const difficulties = [
   '高校生の定期テストレベル',
@@ -7,6 +9,8 @@ const difficulties = [
   '二次試験初級レベル',
   '二次試験上級レベル',
 ];
+
+const { MAX_WORD_COUNT } = constants;
 
 const defaultLongForm = {
   wordCount: 400,
@@ -24,6 +28,10 @@ const defaultLongForm = {
 };
 
 const defaultEssayForm = { theme: '自由テーマ', content: '' };
+
+const countWords = (text = '') => {
+  return wordCount(text || '');
+};
 
 const fetchJson = async (url, options = {}) => {
   const res = await fetch(url, {
@@ -55,8 +63,8 @@ const Label = ({ title, children }) => (
 );
 
 function Login({ onLogin }) {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const submit = async (e) => {
@@ -245,6 +253,7 @@ function UserAdmin({ me, users, onRefresh, config }) {
           <Label title="パスワード">
             <input
               required
+              type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               disabled={me.userType !== 'admin'}
@@ -357,11 +366,16 @@ function LongTask({ form, setForm, onSubmit, saving, onPause, onResume }) {
     <div className="card">
       <h3>長文問題作成</h3>
       <div className="grid">
-        <Label title="語数 (最大1000)">
+        <Label title={`語数 (最大${MAX_WORD_COUNT})`}>
           <input
             type="number"
+            min="1"
+            max={MAX_WORD_COUNT}
             value={form.wordCount}
-            onChange={(e) => setForm({ ...form, wordCount: Number(e.target.value) })}
+            onChange={(e) => {
+              const next = Math.max(0, Math.min(Number(e.target.value) || 0, MAX_WORD_COUNT));
+              setForm({ ...form, wordCount: next });
+            }}
           />
         </Label>
         <Label title="難易度">
@@ -411,6 +425,7 @@ function LongTask({ form, setForm, onSubmit, saving, onPause, onResume }) {
 }
 
 function EssayTask({ form, setForm, onSubmit, onPause, onResume }) {
+  const wordCount = countWords(form.content);
   return (
     <div className="card">
       <h3>自由英作文</h3>
@@ -429,7 +444,7 @@ function EssayTask({ form, setForm, onSubmit, onPause, onResume }) {
         />
       </Label>
       <div className="row">
-        <small>入力語数: {form.content.trim().split(/\s+/).filter(Boolean).length}</small>
+        <small>入力語数: {wordCount}</small>
       </div>
       <div className="row">
         <button className="primary" onClick={onSubmit}>

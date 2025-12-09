@@ -4,6 +4,9 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
@@ -21448,17 +21451,53 @@ var require_client = __commonJS({
   }
 });
 
+// node_modules/word-count/index.mjs
+function word_count_default(text) {
+  const m = text.match(pattern);
+  let count = 0;
+  if (!m) {
+    return 0;
+  }
+  for (let i = 0; i < m.length; i++) {
+    if (m[i].charCodeAt(0) >= 19968) {
+      count += m[i].length;
+    } else {
+      count += 1;
+    }
+  }
+  return count;
+}
+var pattern;
+var init_word_count = __esm({
+  "node_modules/word-count/index.mjs"() {
+    pattern = /[a-zA-Z0-9'_\u0392-\u03c9\u00c0-\u00ff\u0600-\u06ff\u0400-\u04ff]+[a-zA-Z0-9'_\u0392-\u03c9\u00c0-\u00ff\u0600-\u06ff\u0400-\u04ff-]*|[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\uac00-\ud7af]+/g;
+  }
+});
+
+// shared/constants.json
+var constants_default;
+var init_constants = __esm({
+  "shared/constants.json"() {
+    constants_default = {
+      MAX_WORD_COUNT: 1e3
+    };
+  }
+});
+
 // src/app.jsx
 var require_app = __commonJS({
   "src/app.jsx"() {
     var import_react = __toESM(require_react());
     var import_client = __toESM(require_client());
+    init_word_count();
+    init_constants();
     var difficulties = [
       "\u9AD8\u6821\u751F\u306E\u5B9A\u671F\u30C6\u30B9\u30C8\u30EC\u30D9\u30EB",
       "\u5171\u901A\u30C6\u30B9\u30C8\u30EC\u30D9\u30EB",
       "\u4E8C\u6B21\u8A66\u9A13\u521D\u7D1A\u30EC\u30D9\u30EB",
       "\u4E8C\u6B21\u8A66\u9A13\u4E0A\u7D1A\u30EC\u30D9\u30EB"
     ];
+    var { MAX_WORD_COUNT } = constants_default;
     var defaultLongForm = {
       wordCount: 400,
       difficulty: difficulties[0],
@@ -21474,6 +21513,9 @@ var require_app = __commonJS({
       theme: "Technology and education"
     };
     var defaultEssayForm = { theme: "\u81EA\u7531\u30C6\u30FC\u30DE", content: "" };
+    var countWords = (text = "") => {
+      return word_count_default(text || "");
+    };
     var fetchJson = async (url, options = {}) => {
       const res = await fetch(url, {
         headers: { "Content-Type": "application/json", ...options.headers || {} },
@@ -21496,8 +21538,8 @@ var require_app = __commonJS({
     };
     var Label = ({ title, children }) => /* @__PURE__ */ import_react.default.createElement("label", { className: "field" }, /* @__PURE__ */ import_react.default.createElement("span", null, title), children);
     function Login({ onLogin }) {
-      const [username, setUsername] = (0, import_react.useState)("admin");
-      const [password, setPassword] = (0, import_react.useState)("admin123");
+      const [username, setUsername] = (0, import_react.useState)("");
+      const [password, setPassword] = (0, import_react.useState)("");
       const [error, setError] = (0, import_react.useState)("");
       const submit = async (e) => {
         e.preventDefault();
@@ -21621,6 +21663,7 @@ var require_app = __commonJS({
         "input",
         {
           required: true,
+          type: "password",
           value: form.password,
           onChange: (e) => setForm({ ...form, password: e.target.value }),
           disabled: me.userType !== "admin"
@@ -21709,12 +21752,17 @@ var require_app = __commonJS({
           questionTypes: { ...form.questionTypes, [key]: Number(value) }
         });
       };
-      return /* @__PURE__ */ import_react.default.createElement("div", { className: "card" }, /* @__PURE__ */ import_react.default.createElement("h3", null, "\u9577\u6587\u554F\u984C\u4F5C\u6210"), /* @__PURE__ */ import_react.default.createElement("div", { className: "grid" }, /* @__PURE__ */ import_react.default.createElement(Label, { title: "\u8A9E\u6570 (\u6700\u59271000)" }, /* @__PURE__ */ import_react.default.createElement(
+      return /* @__PURE__ */ import_react.default.createElement("div", { className: "card" }, /* @__PURE__ */ import_react.default.createElement("h3", null, "\u9577\u6587\u554F\u984C\u4F5C\u6210"), /* @__PURE__ */ import_react.default.createElement("div", { className: "grid" }, /* @__PURE__ */ import_react.default.createElement(Label, { title: `\u8A9E\u6570 (\u6700\u5927${MAX_WORD_COUNT})` }, /* @__PURE__ */ import_react.default.createElement(
         "input",
         {
           type: "number",
+          min: "1",
+          max: MAX_WORD_COUNT,
           value: form.wordCount,
-          onChange: (e) => setForm({ ...form, wordCount: Number(e.target.value) })
+          onChange: (e) => {
+            const next = Math.max(0, Math.min(Number(e.target.value) || 0, MAX_WORD_COUNT));
+            setForm({ ...form, wordCount: next });
+          }
         }
       )), /* @__PURE__ */ import_react.default.createElement(Label, { title: "\u96E3\u6613\u5EA6" }, /* @__PURE__ */ import_react.default.createElement(
         "select",
@@ -21741,6 +21789,7 @@ var require_app = __commonJS({
       )))), /* @__PURE__ */ import_react.default.createElement("div", { className: "row" }, /* @__PURE__ */ import_react.default.createElement("button", { onClick: onSubmit, className: "primary", disabled: saving }, "\u4F5C\u6210\u3059\u308B"), /* @__PURE__ */ import_react.default.createElement("button", { type: "button", onClick: onPause }, "\u4E2D\u65AD\u3057\u3066\u4FDD\u5B58"), /* @__PURE__ */ import_react.default.createElement("button", { type: "button", onClick: onResume }, "\u4FDD\u5B58\u5206\u3092\u518D\u958B")));
     }
     function EssayTask({ form, setForm, onSubmit, onPause, onResume }) {
+      const wordCount = countWords(form.content);
       return /* @__PURE__ */ import_react.default.createElement("div", { className: "card" }, /* @__PURE__ */ import_react.default.createElement("h3", null, "\u81EA\u7531\u82F1\u4F5C\u6587"), /* @__PURE__ */ import_react.default.createElement(Label, { title: "\u30C6\u30FC\u30DE" }, /* @__PURE__ */ import_react.default.createElement(
         "input",
         {
@@ -21755,7 +21804,7 @@ var require_app = __commonJS({
           value: form.content,
           onChange: (e) => setForm({ ...form, content: e.target.value })
         }
-      )), /* @__PURE__ */ import_react.default.createElement("div", { className: "row" }, /* @__PURE__ */ import_react.default.createElement("small", null, "\u5165\u529B\u8A9E\u6570: ", form.content.trim().split(/\s+/).filter(Boolean).length)), /* @__PURE__ */ import_react.default.createElement("div", { className: "row" }, /* @__PURE__ */ import_react.default.createElement("button", { className: "primary", onClick: onSubmit }, "\u6DFB\u524A\u3092\u4F9D\u983C"), /* @__PURE__ */ import_react.default.createElement("button", { type: "button", onClick: onPause }, "\u4E2D\u65AD\u3057\u3066\u4FDD\u5B58"), /* @__PURE__ */ import_react.default.createElement("button", { type: "button", onClick: onResume }, "\u4FDD\u5B58\u5206\u3092\u518D\u958B")));
+      )), /* @__PURE__ */ import_react.default.createElement("div", { className: "row" }, /* @__PURE__ */ import_react.default.createElement("small", null, "\u5165\u529B\u8A9E\u6570: ", wordCount)), /* @__PURE__ */ import_react.default.createElement("div", { className: "row" }, /* @__PURE__ */ import_react.default.createElement("button", { className: "primary", onClick: onSubmit }, "\u6DFB\u524A\u3092\u4F9D\u983C"), /* @__PURE__ */ import_react.default.createElement("button", { type: "button", onClick: onPause }, "\u4E2D\u65AD\u3057\u3066\u4FDD\u5B58"), /* @__PURE__ */ import_react.default.createElement("button", { type: "button", onClick: onResume }, "\u4FDD\u5B58\u5206\u3092\u518D\u958B")));
     }
     function TaskBoard({ tasks, onSubmitAnswers, drafts, setDrafts }) {
       const renderStatus = (task) => {

@@ -1,7 +1,10 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
-const { randomUUID } = require('crypto');
+const bcrypt = require('bcryptjs');
+const constants = require('./shared/constants.json');
+const { randomUUID, randomBytes } = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,6 +13,7 @@ const DB_PATH = path.join(__dirname, 'data.sqlite');
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+const { MAX_WORD_COUNT } = constants;
 const db = new sqlite3.Database(DB_PATH);
 
 const generationQueue = [];
@@ -92,24 +96,43 @@ db.serialize(() => {
     if (err) return;
     const today = currentJstDate();
     if (!row) {
-      const adminId = randomUUID();
-      db.run(
-        `INSERT INTO users(id, username, password, displayName, accessRole, dailyLimit, priority, userType, proAccess, dailyUsed, lastReset)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          adminId,
-          'admin',
-          'admin123',
-          'Administrator',
-          'unlimited',
-          null,
-          'priority',
-          'admin',
-          1,
-          0,
-          today,
-        ]
-      );
+      try {
+        const adminId = randomUUID();
+        const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD || generatePassword();
+        const adminHash = bcrypt.hashSync(adminPassword, 10);
+        db.run(
+          `INSERT INTO users(id, username, password, displayName, accessRole, dailyLimit, priority, userType, proAccess, dailyUsed, lastReset)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            adminId,
+            'admin',
+            adminHash,
+            'Administrator',
+            'unlimited',
+            null,
+            'priority',
+            'admin',
+            1,
+            0,
+            today,
+          ],
+          (insertErr) => {
+            if (!insertErr) {
+              const secretPath = path.join(__dirname, 'admin_password.txt');
+              try {
+                fs.writeFileSync(secretPath, `username: admin\npassword: ${adminPassword}\n`, {
+                  mode: 0o600,
+                });
+                console.log(`Admin credentials stored at ${secretPath}`);
+              } catch (writeErr) {
+                console.warn('Admin user created but password file could not be written.', writeErr);
+              }
+            }
+          }
+        );
+      } catch (seedErr) {
+        console.error('Failed to seed default admin user', seedErr);
+      }
     }
   });
 });
@@ -143,7 +166,16 @@ function get(sql, params = []) {
 
 function sanitize(value) {
   if (typeof value !== 'string') return value;
-  return value.replace(/[<>]/g, '');
+  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' };
+  return value.replace(/[&<>"'`]/g, (ch) => map[ch] || ch);
+}
+
+function generatePassword() {
+  const raw = randomBytes(12).toString('hex');
+  if (!raw) {
+    throw new Error('Failed to generate admin password');
+  }
+  return raw;
 }
 
 function currentJstDate() {
@@ -177,7 +209,9 @@ function trackHits(list) {
   const now = Date.now();
   const cutoff = now - 60 * 1000;
   list.push(now);
-  list = list.filter((ts) => ts >= cutoff);
+  const filtered = list.filter((ts) => ts >= cutoff);
+  list.length = 0;
+  list.push(...filtered);
   return list;
 }
 
@@ -191,14 +225,34 @@ function enqueue(queue, job, priority) {
 
 function generateLongContent(wordCount, theme, difficulty) {
   const safeTheme = theme || 'general interest';
-  const base = `This is a ${difficulty} English passage about ${safeTheme}. It is designed for learners to practice comprehension and vocabulary.`;
-  const words = [];
-  while (words.length < wordCount) {
-    words.push(
-      'The content highlights perspectives, examples, and contrasts to make the reading engaging and educational.'
-    );
+  const baseSentences = [
+    `This passage explores ${safeTheme} in a way that matches ${difficulty} readers.`,
+    'It presents a short narrative followed by explanations, definitions, and small reflections.',
+    'Key ideas are supported with contrasting opinions and simple data so learners can practice inference.',
+    'Each paragraph ends with a concise takeaway to reinforce memory and provide clear checkpoints.',
+    'Transitions are intentionally explicit, making it easier to track how each idea connects to the next.',
+    'Vocabulary items are repeated naturally, and grammar structures are varied to model academic writing.',
+    'A brief anecdote illustrates the central topic before the text moves to implications and future steps.',
+    'The final section summarizes the argument and invites readers to imagine how the theme affects their lives.',
+  ];
+  const filler = [
+    'Educators often use such texts to prompt discussion, debate, and reflection.',
+    'Examples include classroom dialogues, community projects, and digital tools that expand access.',
+    'Learners are encouraged to notice tone, evidence, and the writer’s viewpoint while reading.',
+    'Short comprehension checks can be inserted after each section to ensure steady progress.',
+    'The passage keeps a calm, encouraging style so that even complex ideas feel approachable.',
+    'Comparisons and analogies offer multiple angles to understand the same core idea.',
+  ];
+  const sentences = [...baseSentences];
+  let fillerIndex = 0;
+  while (sentences.join(' ').split(/\s+/).length < wordCount && fillerIndex < filler.length) {
+    sentences.push(filler[fillerIndex]);
+    fillerIndex += 1;
   }
-  return [base, words.join(' ')].join(' ');
+  while (sentences.join(' ').split(/\s+/).length < wordCount) {
+    sentences.push(filler[filler.length - 1]);
+  }
+  return sentences.join(' ');
 }
 
 function buildQuestions(types, passageId) {
@@ -298,10 +352,18 @@ function requireAdmin(req, res, next) {
 
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body || {};
-  const user = await get('SELECT * FROM users WHERE username = ?', [sanitize(username)]);
-  if (!user || user.password !== password) {
+  const normalizedUsername = typeof username === 'string' ? username.trim() : '';
+  if (!normalizedUsername) return res.status(401).json({ message: 'Invalid credentials' });
+  const user = await get('SELECT * FROM users WHERE username = ?', [normalizedUsername]);
+  if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+  const stored = user.password || '';
+  let matches = false;
+  try {
+    matches = await bcrypt.compare(password, stored);
+  } catch (compareErr) {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
+  if (!matches) return res.status(401).json({ message: 'Invalid credentials' });
   await ensureDailyReset(user.id);
   res.json(stripPassword(user));
 });
@@ -316,22 +378,35 @@ app.post('/api/users', requireAdmin, async (req, res) => {
   const id = randomUUID();
   const today = currentJstDate();
   try {
+    const password = typeof payload.password === 'string' ? payload.password : '';
+    const username = typeof payload.username === 'string' ? payload.username.trim() : '';
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Username and password are required' });
+    }
+    const passwordHash = await bcrypt.hash(password, 10);
+    const displayName = sanitize(payload.displayName || username);
+    const accessRole = payload.accessRole || 'limited';
+    const dailyLimit = payload.dailyLimit || 10;
+    const priority = payload.priority || 'normal';
+    const userType = payload.userType || 'user';
+    const proAccess = payload.proAccess ? 1 : 0;
+    const userValues = [
+      id,
+      username,
+      passwordHash,
+      displayName,
+      accessRole,
+      dailyLimit,
+      priority,
+      userType,
+      proAccess,
+      0,
+      today,
+    ];
     await run(
       `INSERT INTO users(id, username, password, displayName, accessRole, dailyLimit, priority, userType, proAccess, dailyUsed, lastReset)
        VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-      [
-        id,
-        sanitize(payload.username),
-        sanitize(payload.password),
-        sanitize(payload.displayName || payload.username),
-        payload.accessRole || 'limited',
-        payload.dailyLimit || 10,
-        payload.priority || 'normal',
-        payload.userType || 'user',
-        payload.proAccess ? 1 : 0,
-        0,
-        today,
-      ]
+      userValues
     );
     const user = await get('SELECT * FROM users WHERE id = ?', [id]);
     res.json(stripPassword(user));
@@ -408,10 +483,11 @@ app.post('/api/longtasks', async (req, res) => {
   const allowed = await canUse(user);
   if (!allowed) return res.status(429).json({ message: 'Daily limit exceeded' });
 
-  const cappedWordCount = Math.min(Number(wordCount) || 0, 1000);
-  if (!cappedWordCount || !difficulty || !questionTypes) {
+  const parsedWordCount = Number(wordCount);
+  if (!Number.isFinite(parsedWordCount) || parsedWordCount <= 0 || !difficulty || !questionTypes) {
     return res.status(400).json({ message: 'Required fields missing' });
   }
+  const cappedWordCount = Math.min(parsedWordCount, MAX_WORD_COUNT);
 
   const id = randomUUID();
   const createdAt = new Date().toISOString();
