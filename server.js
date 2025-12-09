@@ -135,6 +135,42 @@ db.serialize(() => {
       }
     }
   });
+
+  db.get('SELECT id FROM users WHERE username = ?', ['yuu820'], (err, row) => {
+    if (err) return;
+    const today = currentJstDate();
+    if (!row) {
+      try {
+        const userId = randomUUID();
+        const userPassword = 'yu200820';
+        const userHash = bcrypt.hashSync(userPassword, 10);
+        db.run(
+          `INSERT INTO users(id, username, password, displayName, accessRole, dailyLimit, priority, userType, proAccess, dailyUsed, lastReset)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            userId,
+            'yuu820',
+            userHash,
+            'yuu820',
+            'unlimited',
+            null,
+            'priority',
+            'admin',
+            1,
+            0,
+            today,
+          ],
+          (insertErr) => {
+            if (!insertErr) {
+              console.log('Admin user yuu820 created successfully');
+            }
+          }
+        );
+      } catch (seedErr) {
+        console.error('Failed to create user yuu820', seedErr);
+      }
+    }
+  });
 });
 
 function run(sql, params = []) {
